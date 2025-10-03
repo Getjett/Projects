@@ -14,8 +14,8 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.basicConfig(level=logging.WARNING)
 
-def get_stock_data(symbol, days=60, kite_connection=None):
-    """Fetch 5-minute historical data for a stock over longer period"""
+def get_stock_data(symbol, days=300, kite_connection=None):
+    """Fetch 5-minute historical data in chunks to overcome API limits"""
     
     if kite_connection is None:
         kite = connect_to_kite()
@@ -32,19 +32,47 @@ def get_stock_data(symbol, days=60, kite_connection=None):
             return None
         
         instrument_token = instrument['instrument_token']
-        from_date = datetime.now() - timedelta(days=days)
-        to_date = datetime.now()
         
-        # Fetch 5-minute data for more granular analysis
-        historical_data = kite.historical_data(
-            instrument_token=instrument_token,
-            from_date=from_date,
-            to_date=to_date,
-            interval="5minute"
-        )
+        # Split into chunks of 90 days to stay under 100-day limit
+        chunk_size = 90
+        all_data = []
         
-        df = pd.DataFrame(historical_data)
+        end_date = datetime.now()
+        
+        while days > 0:
+            current_chunk_size = min(chunk_size, days)
+            start_date = end_date - timedelta(days=current_chunk_size)
+            
+            print(f"    Fetching {start_date.date()} to {end_date.date()}...", end=" ")
+            
+            try:
+                historical_data = kite.historical_data(
+                    instrument_token=instrument_token,
+                    from_date=start_date,
+                    to_date=end_date,
+                    interval="5minute"
+                )
+                
+                if historical_data:
+                    all_data.extend(historical_data)
+                    print(f"Got {len(historical_data)} candles")
+                else:
+                    print("No data")
+                
+            except Exception as chunk_error:
+                print(f"Failed: {chunk_error}")
+            
+            # Move to next chunk
+            end_date = start_date
+            days -= current_chunk_size
+        
+        if not all_data:
+            return None
+        
+        # Combine all chunks and sort by date
+        df = pd.DataFrame(all_data)
         df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date').drop_duplicates(subset=['date']).reset_index(drop=True)
         
         # Filter to market hours only (9:15 AM - 3:30 PM)
         df = df[df['date'].dt.time >= pd.Timestamp('09:15:00').time()]
@@ -56,61 +84,132 @@ def get_stock_data(symbol, days=60, kite_connection=None):
         print(f"Error fetching data for {symbol}: {e}")
         return None
 
+def apply_intraday_rules(df):
+    """Apply intraday trading rules:
+    1. No positions in first 30 minutes (9:15-9:45 AM)
+    2. No positions in last 30 minutes (3:00-3:30 PM)  
+    3. Close all positions at end of day (3:30 PM)
+    """
+    
+    df['Time'] = df['date'].dt.time
+    df['Date'] = df['date'].dt.date
+    df['Position'] = 0
+    
+    # Define trading time restrictions
+    market_open = pd.Timestamp('09:15:00').time()
+    first_30_end = pd.Timestamp('09:45:00').time()
+    last_30_start = pd.Timestamp('15:00:00').time()
+    market_close = pd.Timestamp('15:30:00').time()
+    
+    # Remove signals in restricted times
+    restricted_times = (
+        (df['Time'] >= market_open) & (df['Time'] <= first_30_end) |  # First 30 min
+        (df['Time'] >= last_30_start) & (df['Time'] <= market_close)   # Last 30 min
+    )
+    df.loc[restricted_times, 'Signal'] = 0
+    
+    # Calculate positions with end-of-day closure
+    signals = df[df['Signal'] != 0].index
+    
+    position = 0
+    current_date = None
+    
+    for idx in signals:
+        signal_date = df.loc[idx, 'Date']
+        
+        # Close position at end of previous day if date changed
+        if current_date is not None and signal_date != current_date:
+            # Find last candle of previous day
+            prev_day_candles = df[df['Date'] == current_date]
+            if not prev_day_candles.empty:
+                last_candle_idx = prev_day_candles.index[-1]
+                df.loc[last_candle_idx, 'Position'] = 0
+            position = 0
+        
+        current_date = signal_date
+        
+        # Process signal
+        if df.loc[idx, 'Signal'] == 1:
+            position = 1
+        elif df.loc[idx, 'Signal'] == -1:
+            position = 0
+        
+        # Set position for subsequent candles until next signal or end of day
+        next_signal_idx = signals[signals > idx]
+        
+        # Find end of current day
+        current_day_candles = df[df['Date'] == signal_date]
+        end_of_day_idx = current_day_candles.index[-1]
+        
+        if len(next_signal_idx) > 0:
+            next_idx = next_signal_idx[0]
+            next_signal_date = df.loc[next_idx, 'Date']
+            
+            if next_signal_date == signal_date:
+                # Next signal is same day
+                end_idx = next_idx
+            else:
+                # Next signal is different day, close at end of current day
+                end_idx = end_of_day_idx + 1
+        else:
+            # No more signals, close at end of current day
+            end_idx = end_of_day_idx + 1
+        
+        df.loc[idx:min(end_idx-1, end_of_day_idx), 'Position'] = position
+        
+        # Force close at end of day
+        df.loc[end_of_day_idx, 'Position'] = 0
+    
+    return df
+
 def simple_moving_average_strategy(df, short_period=5, long_period=20):
-    """Simple Moving Average Strategy"""
+    """Optimized Moving Average Strategy with intraday trading rules"""
     
     if df is None or len(df) < long_period:
         return None
     
+    df = df.copy()
     df['MA_Short'] = df['close'].rolling(window=short_period).mean()
     df['MA_Long'] = df['close'].rolling(window=long_period).mean()
+    
+    # Vectorized signal generation
     df['Signal'] = 0
-    df['Position'] = 0
-    
     buy_condition = (df['MA_Short'] > df['MA_Long']) & (df['MA_Short'].shift(1) <= df['MA_Long'].shift(1))
-    df.loc[buy_condition, 'Signal'] = 1
-    
     sell_condition = (df['MA_Short'] < df['MA_Long']) & (df['MA_Short'].shift(1) >= df['MA_Long'].shift(1))
+    
+    df.loc[buy_condition, 'Signal'] = 1
     df.loc[sell_condition, 'Signal'] = -1
     
-    position = 0
-    for i in range(len(df)):
-        if df.iloc[i]['Signal'] == 1:
-            position = 1
-        elif df.iloc[i]['Signal'] == -1:
-            position = 0
-        df.iloc[i, df.columns.get_loc('Position')] = position
+    # Apply intraday trading rules
+    df = apply_intraday_rules(df)
     
     return df
 
 def simple_rsi_strategy(df, period=14, oversold=30, overbought=70):
-    """Simple RSI Strategy"""
+    """Optimized RSI Strategy with intraday trading rules"""
     
     if df is None or len(df) < period + 1:
         return None
     
+    df = df.copy()
+    
+    # Calculate RSI efficiently
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
     
+    # Vectorized signal generation
     df['Signal'] = 0
-    df['Position'] = 0
-    
     buy_condition = (df['RSI'] < oversold) & (df['RSI'].shift(1) >= oversold)
-    df.loc[buy_condition, 'Signal'] = 1
-    
     sell_condition = (df['RSI'] > overbought) & (df['RSI'].shift(1) <= overbought)
+    
+    df.loc[buy_condition, 'Signal'] = 1
     df.loc[sell_condition, 'Signal'] = -1
     
-    position = 0
-    for i in range(len(df)):
-        if df.iloc[i]['Signal'] == 1:
-            position = 1
-        elif df.iloc[i]['Signal'] == -1:
-            position = 0
-        df.iloc[i, df.columns.get_loc('Position')] = position
+    # Apply intraday trading rules
+    df = apply_intraday_rules(df)
     
     return df
 
@@ -169,11 +268,11 @@ def calculate_returns(df, initial_capital=100000):
     }
 
 def run_clean_backtest():
-    """Run backtest with 5-minute data over longer period"""
+    """Run backtest with 5-minute data over 300 days"""
     
     print("=" * 80)
     print("                         STRATEGY BACKTEST RESULTS")
-    print("                        (5-Minute Charts - 60 Days)")
+    print("                       (5-Minute Charts - 300 Days)")
     print("=" * 80)
     
     # Connect once
@@ -201,19 +300,19 @@ def run_clean_backtest():
     
     results = []
     
-    print(f"\nFetching 5-minute data and running strategies...")
-    print("Note: Processing larger dataset - this may take a moment...")
+    print(f"\nFetching 5-minute data over 300 days in chunks and running strategies...")
+    print("Note: Fetching data in 90-day chunks to overcome API limits...")
     
     for symbol in symbols:
-        print(f"Processing {symbol}...", end=" ")
+        print(f"Processing {symbol}:")
         
-        # Get 60 days of 5-minute data
-        df = get_stock_data(symbol, days=60, kite_connection=kite)
-        if df is None or len(df) < 50:
-            print("FAILED")
+        # Get 300 days of 5-minute data in chunks
+        df = get_stock_data(symbol, days=300, kite_connection=kite)
+        if df is None or len(df) < 100:
+            print("  ❌ FAILED - No sufficient data")
             continue
         
-        print(f"Got {len(df)} candles")
+        print(f"  ✅ Combined: {len(df):,} candles ({len(df)/78:.0f} trading days)")
         
         for strategy_name, strategy_func, params in strategies:
             try:
@@ -230,7 +329,8 @@ def run_clean_backtest():
                             'Final Capital': int(result['final_capital']),
                             'Trades': len(result['trades']),
                             'Profit/Loss': int(result['final_capital'] - result['initial_capital']),
-                            'Data Points': len(df)
+                            'Data Points': len(df),
+                            'Trading Days': round(len(df)/78, 0)  # ~78 candles per trading day
                         })
             except Exception as e:
                 continue
@@ -253,7 +353,7 @@ def run_clean_backtest():
                 print("-" * 60)
                 
                 # Show detailed results for this asset
-                asset_table = symbol_results[['Strategy', 'Return %', 'Final Capital', 'Trades', 'Profit/Loss', 'Data Points']].copy()
+                asset_table = symbol_results[['Strategy', 'Return %', 'Final Capital', 'Trades', 'Profit/Loss', 'Trading Days']].copy()
                 asset_table = asset_table.sort_values('Return %', ascending=False)
                 print(asset_table.to_string(index=False))
                 

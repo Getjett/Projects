@@ -18,7 +18,7 @@ KITE_API_SECRET = "8wddbiym6c3mpt0eg59a15fez8gzv26v"
 
 # Optional: Saved access token (if you want to reuse without login each time)
 # Note: Access tokens expire at 6 AM next day (regulatory requirement)
-KITE_ACCESS_TOKEN = "5rd12JGouVvtOkVb6gVD2ZiPIDzyi6Mn"
+KITE_ACCESS_TOKEN = "VI3zxnLzf5y7U95wJZZFvi1yblfsry1O"
 
 
 # Redirect URL (set this in your Kite Connect app settings)
