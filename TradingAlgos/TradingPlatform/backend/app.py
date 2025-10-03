@@ -257,18 +257,70 @@ def get_historical_data(symbol):
         timeframe = request.args.get('timeframe', '5minute')
         days = int(request.args.get('days', 30))
         
+        print(f"📊 Fetching {days} days of {timeframe} data for {symbol}")
+        
+        # Try to get real data from Kite API
+        real_data = None
         if KITE_AVAILABLE:
-            # Try to get real data
             try:
                 kite = connect_to_kite()
                 if kite:
-                    # Use your existing data fetching logic
-                    # This would integrate with your clean_backtest.py functions
-                    pass
-            except:
-                pass
+                    from datetime import datetime, timedelta
+                    import pandas as pd
+                    
+                    # Convert timeframe to Kite format
+                    kite_timeframe = {
+                        '1minute': 'minute',
+                        '5minute': '5minute', 
+                        '15minute': '15minute',
+                        'day': 'day'
+                    }.get(timeframe, '5minute')
+                    
+                    # Calculate date range
+                    to_date = datetime.now()
+                    from_date = to_date - timedelta(days=days)
+                    
+                    # Get instrument token for the symbol
+                    # Note: This is a simplified approach - in production you'd have a proper instrument mapping
+                    try:
+                        # Try to fetch data (this will work if symbol format is correct)
+                        historical_data = kite.historical_data(
+                            instrument_token=f"NSE:{symbol}",  # Simplified - should be actual token
+                            from_date=from_date,
+                            to_date=to_date,
+                            interval=kite_timeframe
+                        )
+                        
+                        real_data = [
+                            {
+                                'date': candle['date'].isoformat(),
+                                'open': candle['open'],
+                                'high': candle['high'], 
+                                'low': candle['low'],
+                                'close': candle['close'],
+                                'volume': candle['volume']
+                            } for candle in historical_data
+                        ]
+                        print(f"✅ Retrieved {len(real_data)} real data points from Kite API")
+                        
+                    except Exception as e:
+                        print(f"⚠️ Error fetching real data: {e}")
+                        
+            except Exception as e:
+                print(f"⚠️ Kite API error: {e}")
+        
+        # If real data available, return it
+        if real_data:
+            return jsonify({
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'data': real_data,
+                'source': 'kite_api',
+                'message': f'Real data from Kite API ({len(real_data)} records)'
+            })
         
         # Generate sample data for demo
+        print(f"📝 Generating sample data for demo")
         dates = pd.date_range(start=datetime.now() - timedelta(days=days), 
                              end=datetime.now(), freq='5T')
         
@@ -299,7 +351,9 @@ def get_historical_data(symbol):
         return jsonify({
             'symbol': symbol,
             'timeframe': timeframe,
-            'data': data[-100:]  # Return last 100 points for demo
+            'data': data[-200:],  # Return last 200 points
+            'source': 'sample_data',
+            'message': f'Sample data for demo ({len(data[-200:])} records)'
         })
         
     except Exception as e:
