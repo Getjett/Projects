@@ -1,24 +1,186 @@
-# Bank Nifty Options Strategy - Web Interface Specification
+# Universal Trading Strategy Platform - Web Interface Specification
 
 ## 📋 Table of Contents
 1. [Overview](#overview)
-2. [Strategy Builder - Input Parameters](#strategy-builder---input-parameters)
-3. [Backtesting Configuration](#backtesting-configuration)
-4. [Pattern Creator Module](#pattern-creator-module)
-5. [Database Schema](#database-schema)
-6. [API Endpoints](#api-endpoints)
-7. [UI/UX Design Guidelines](#uiux-design-guidelines)
+2. [Instrument Selection](#instrument-selection)
+3. [Strategy Builder - Input Parameters](#strategy-builder---input-parameters)
+4. [Backtesting Configuration](#backtesting-configuration)
+5. [Pattern Creator Module](#pattern-creator-module)
+6. [Database Schema](#database-schema)
+7. [API Endpoints](#api-endpoints)
+8. [UI/UX Design Guidelines](#uiux-design-guidelines)
 
 ---
 
 ## 🎯 Overview
 
-This document outlines the complete specification for building a web-based interface for the Bank Nifty Options Trading Strategy system. The platform enables users to:
+This document outlines the complete specification for building a **universal web-based trading strategy platform** that supports multiple asset classes:
 
-1. **Create custom strategies** using various parameters
+### **Supported Instruments:**
+- 📊 **Index Options** (Bank Nifty, Nifty, Fin Nifty)
+- 📈 **Equity/Stocks** (NSE, BSE)
+- 🌾 **Commodities** (MCX - Gold, Silver, Crude Oil, etc.)
+- 💱 **Currency** (USD/INR, EUR/INR, etc.)
+- 📉 **Futures** (Index Futures, Stock Futures)
+
+### **Platform Capabilities:**
+1. **Create custom strategies** for any instrument using various parameters
 2. **Backtest strategies** on historical data for selected date ranges
 3. **Build candlestick patterns** for entry/exit signals
 4. **Visualize results** with detailed analytics and charts
+5. **Multi-instrument portfolio** management
+6. **Cross-asset strategy comparison**
+
+---
+
+## 🎯 Instrument Selection
+
+### **Section 0: Instrument & Market Selection** (NEW)
+
+#### 0.1 Asset Class Selection
+```
+Field Type: Radio Buttons / Tab Navigation
+Options:
+  ○ Index Options (Nifty, Bank Nifty, Fin Nifty)
+  ○ Equity/Stocks (NSE, BSE)
+  ○ Commodities (MCX)
+  ○ Currency (CDS)
+  ○ Futures (Index & Stock Futures)
+```
+
+#### 0.2 Instrument Selection (Dynamic based on Asset Class)
+
+**For Index Options:**
+```
+Field Type: Dropdown
+Options:
+  - NIFTY (Nifty 50)
+  - BANKNIFTY (Bank Nifty) [Default from existing strategy]
+  - FINNIFTY (Fin Nifty)
+  - MIDCPNIFTY (Midcap Nifty)
+  
+Option Type (Only for Options):
+  - Call & Put (Both) [Default]
+  - Call Only
+  - Put Only
+```
+
+**For Equity/Stocks:**
+```
+Field Type: Searchable Dropdown with Auto-complete
+Features:
+  - Search by stock name or symbol
+  - Filter by sector (Banking, IT, Pharma, Auto, etc.)
+  - Filter by index membership (Nifty 50, Nifty 500, etc.)
+  - Show current price and volume
+  
+Examples:
+  - RELIANCE (Reliance Industries)
+  - TCS (Tata Consultancy Services)
+  - INFY (Infosys)
+  - HDFCBANK (HDFC Bank)
+  - Custom Watchlist
+  
+Multi-select: Checkbox to test strategy across multiple stocks
+```
+
+**For Commodities (MCX):**
+```
+Field Type: Dropdown with Categories
+Categories:
+  
+  🥇 Bullion:
+    - GOLD (Gold)
+    - GOLDM (Gold Mini)
+    - SILVER (Silver)
+    - SILVERM (Silver Mini)
+    
+  🛢️ Energy:
+    - CRUDEOIL (Crude Oil)
+    - NATURALGAS (Natural Gas)
+    
+  🌾 Agriculture:
+    - CARDAMOM
+    - COTTON
+    - MENTHAOIL
+    
+  🏭 Base Metals:
+    - COPPER
+    - ZINC
+    - NICKEL
+    - LEAD
+    - ALUMINIUM
+```
+
+**For Currency:**
+```
+Field Type: Dropdown
+Options:
+  - USDINR (USD/INR)
+  - EURINR (EUR/INR)
+  - GBPINR (GBP/INR)
+  - JPYINR (JPY/INR)
+```
+
+**For Futures:**
+```
+Field Type: Dropdown with Sub-categories
+Options:
+  Index Futures:
+    - NIFTY FUT
+    - BANKNIFTY FUT
+    - FINNIFTY FUT
+    
+  Stock Futures:
+    - (Same searchable list as Equity)
+```
+
+#### 0.3 Exchange Selection
+```
+Field Type: Dropdown (Auto-selected based on instrument)
+Options:
+  - NSE (National Stock Exchange) [Default for Equity/Options]
+  - BSE (Bombay Stock Exchange)
+  - NFO (NSE Futures & Options)
+  - MCX (Multi Commodity Exchange)
+  - CDS (Currency Derivatives Segment)
+```
+
+#### 0.4 Contract Specifications (Dynamic Info Display)
+```
+Display (Read-only, fetched from exchange):
+  For Options:
+    - Lot Size: 15 (Bank Nifty), 50 (Nifty), 40 (Fin Nifty)
+    - Tick Size: 0.05
+    - Contract Value: ₹X,XX,XXX
+    - Expiry Day: Wednesday (Weekly), Last Thursday (Monthly)
+    
+  For Equity:
+    - Lot Size: 1 (Cash Market)
+    - Tick Size: 0.05
+    - Circuit Limits: ±10%, ±20%
+    
+  For Commodities:
+    - Lot Size: Varies (e.g., Gold: 100g, Silver: 30kg)
+    - Tick Size: Varies by commodity
+    - Contract Months: Available expiries
+    
+  For Futures:
+    - Lot Size: Varies by underlying
+    - Tick Size: 0.05
+    - Expiry: Last Thursday of month
+```
+
+#### 0.5 Product Type (For Options & Futures)
+```
+Field Type: Dropdown
+Options:
+  - MIS (Margin Intraday Square-off) [Default for Intraday]
+  - NRML (Normal - Carry Forward)
+  - CNC (Cash & Carry - For Equity delivery)
+  - BO (Bracket Order)
+  - CO (Cover Order)
+```
 
 ---
 
@@ -34,34 +196,64 @@ Field Type: Text Input
 - Tags (Multi-select: Scalping, Swing, Hedging, etc.)
 ```
 
-#### 1.2 Trading Type
+#### 1.2 Trading Type (Instrument-Specific)
 ```
 Field Type: Radio Button / Dropdown
-Options:
+
+For Options:
+  ○ Intraday (9:15 AM - 3:15 PM) [Default]
+  ○ Positional (Hold till expiry)
+  ○ Swing (2-5 days before expiry)
+
+For Equity:
   ○ Intraday (9:15 AM - 3:15 PM)
-  ○ Positional (Multi-day holding)
-  ○ Swing (2-5 days)
+  ○ Short Term (1-5 days)
+  ○ Swing (1-4 weeks)
+  ○ Positional (1-6 months)
+  ○ Long Term (6+ months)
+
+For Commodities:
+  ○ Intraday (9:00 AM - 11:30 PM) [Extended hours]
+  ○ Short Term (1-5 days)
+  ○ Swing (1-4 weeks)
+  ○ Positional (Till contract expiry)
+
+For Futures:
+  ○ Intraday (9:15 AM - 3:30 PM)
+  ○ Positional (Hold till expiry)
+  ○ Rollover Strategy (Auto-roll to next month)
 ```
 
 ---
 
 ### **Section 2: Entry Logic Configuration**
 
-#### 2.1 Signal Bar Selection
+#### 2.1 Signal Bar Selection (Market Hours Aware)
 ```
 Field Type: Dropdown with Time Display
-Options for INTRADAY:
+
+Options for EQUITY/OPTIONS (9:15 AM - 3:30 PM):
   - First Bar (9:15 - 9:20 AM)
-  - Second Bar (9:20 - 9:25 AM) [Default]
+  - Second Bar (9:20 - 9:25 AM) [Default for Options]
   - Third Bar (9:25 - 9:30 AM)
+  - Opening Range (9:15 - 9:45 AM)
+  - Custom Time Range (Time Picker)
+
+Options for COMMODITIES (9:00 AM - 11:30 PM):
+  - Opening Bar (9:00 - 9:05 AM)
+  - Morning Session (9:00 AM - 5:00 PM)
+  - Evening Session (5:00 PM - 11:30 PM)
   - Custom Time Range (Time Picker)
   
 Time Frame: Dropdown
   - 1 Minute
+  - 3 Minute
   - 5 Minute [Default]
   - 15 Minute
   - 30 Minute
   - 1 Hour
+  - 1 Day (For Positional)
+  - 1 Week (For Long Term)
 ```
 
 #### 2.2 Breakout Strategy Type
@@ -98,23 +290,51 @@ Volume Threshold: Slider (100% - 300%, Default: 150%)
 
 ---
 
-### **Section 3: Strike Selection & Option Parameters**
+### **Section 3: Strike Selection & Option Parameters** (OPTIONS ONLY)
+### **Section 3: Price & Quantity Selection** (EQUITY/COMMODITY/FUTURES)
 
-#### 3.1 Expiry Selection
+#### 3.1 For OPTIONS - Expiry Selection
 ```
 Field Type: Dropdown
-Options:
+
+For Index Options (Nifty, BankNifty, FinNifty):
   - Current Weekly Expiry (Wednesday)
   - Next Weekly Expiry
   - Current Monthly Expiry (Last Thursday)
   - Custom Days to Expiry (Number Input: 0-30 days)
   
-Days to Expiry Filter: Slider (0-30 days)
+For Stock Options:
+  - Current Month Expiry (Last Thursday)
+  - Next Month Expiry
+  - Far Month Expiry
+  
+Days to Expiry Filter: Slider (0-90 days)
   - Min Days: 0 [Default]
-  - Max Days: 7 [Default]
+  - Max Days: 7 [Default for Intraday]
+  - Max Days: 30 [Default for Positional]
 ```
 
-#### 3.2 Strike Selection Strategy
+#### 3.1 For EQUITY/COMMODITY/FUTURES - Entry Price
+```
+Field Type: Radio Buttons + Number Input
+
+Entry Price Type:
+  ○ Market Price (At Signal) [Default]
+  ○ Limit Order (Specify Price)
+  ○ Stop Limit Order
+  ○ Breakout Level (Signal Bar High/Low)
+  
+Limit Price Offset: Number Input (-5% to +5%)
+  - For Buy: Entry Price - Offset
+  - For Sell: Entry Price + Offset
+  
+Order Validity:
+  - IOC (Immediate or Cancel)
+  - DAY (Valid till EOD)
+  - GTC (Good Till Cancelled) [Not available for all]
+```
+
+#### 3.2 For OPTIONS - Strike Selection Strategy
 ```
 Field Type: Dropdown with Visual Strike Ladder
 Options:
@@ -129,9 +349,14 @@ Options:
 Strike Offset: Number Input with +/- buttons
   Range: -500 to +500 (in steps of 100)
   Default: 0 (ATM)
+  
+Strike Rounding:
+  - Bank Nifty: 100 points
+  - Nifty: 50 points
+  - Stocks: As per exchange norms
 ```
 
-#### 3.3 Option Type
+#### 3.3 For OPTIONS - Option Type
 ```
 Field Type: Dynamic (Auto-selected based on signal)
 For Bullish Breakout:
@@ -144,13 +369,58 @@ For Both Directions:
   → Auto-select based on signal
 ```
 
-#### 3.4 Premium Range Filter (Optional)
+#### 3.2 For EQUITY/COMMODITY/FUTURES - Quantity & Position Side
+```
+Field Type: Number Input + Radio Buttons
+
+Position Side:
+  ○ Long (Buy) [Default for Bullish]
+  ○ Short (Sell) [Requires Margin]
+  ○ Both (Based on Signal)
+  
+Quantity Calculation:
+  ○ Fixed Quantity
+    - Equity: Number of Shares (1-10000)
+    - Commodity: Number of Lots (1-100)
+    - Futures: Number of Lots (1-100)
+    
+  ○ Fixed Capital Allocation
+    - Capital Per Trade: ₹10,000 - ₹10,00,000
+    - Auto-calculate quantity based on price
+    
+  ○ Percentage of Portfolio
+    - Allocate X% of total capital (1-100%)
+    
+Leverage (For Margin Trading):
+  - Slider: 1x to 5x [Default: 1x]
+  - Available only for F&O segment
+```
+
+#### 3.4 For OPTIONS - Premium Range Filter (Optional)
 ```
 Field Type: Range Slider
 - Min Entry Premium: 50 [Default: 0]
 - Max Entry Premium: 500 [Default: 1000]
   
 Purpose: Filter out trades where option premium is too low/high
+```
+
+#### 3.4 For EQUITY/COMMODITY - Price Range Filter (Optional)
+```
+Field Type: Range Slider
+
+For Equity:
+  - Min Stock Price: ₹10 [Default: ₹0]
+  - Max Stock Price: ₹10,000 [Default: ₹50,000]
+  
+For Commodity:
+  - Min Price: As per commodity
+  - Max Price: As per commodity
+  
+Purpose: Filter out trades based on instrument price range
+Examples:
+  - Avoid penny stocks (< ₹10)
+  - Focus on high-value stocks only (> ₹500)
 ```
 
 ---
@@ -189,34 +459,72 @@ Default: 3x Signal Bar Range
   Target = Entry ± (Signal Bar Range × 3)
 ```
 
-#### 4.3 Position Size
+#### 4.3 Position Size (Universal)
 ```
 Field Type: Number Input + Dropdown
-Lot Size: Number Input (1-50 lots)
-  Default: 15 lots (Bank Nifty standard)
+
+For OPTIONS:
+  Lot Size: Number Input (1-50 lots)
+    Default: 15 (Bank Nifty), 50 (Nifty), 40 (Fin Nifty)
   
-Max Capital per Trade: Number Input (₹10,000 - ₹10,00,000)
-  Default: ₹50,000
+For EQUITY:
+  Quantity: Number Input (1-10000 shares)
+    Default: Based on capital allocation
+  
+For COMMODITY:
+  Lot Size: Number Input (1-100 lots)
+    Default: 1 lot (varies by commodity)
+    
+For FUTURES:
+  Lot Size: Number Input (1-100 lots)
+    Default: Based on underlying (Nifty: 50, BankNifty: 15)
+
+Max Capital per Trade: Number Input (₹10,000 - ₹50,00,000)
+  Default: ₹50,000 (Options), ₹1,00,000 (Equity/Commodity)
   
 Position Sizing Method:
-  - Fixed Lot Size [Default]
+  - Fixed Quantity/Lot Size [Default]
   - Fixed Risk Amount (Risk X rupees per trade)
   - Percentage of Capital (Risk X% of total capital)
+  - Kelly Criterion (Advanced)
+  - Optimal F (Advanced)
   
-Capital: Number Input (₹1,00,000 - ₹1,00,00,000)
+Total Capital: Number Input (₹1,00,000 - ₹1,00,00,000)
   Default: ₹5,00,000
+  
+Margin Requirements (Display Only):
+  - Auto-calculated based on instrument and broker
+  - Show Required Margin vs Available Capital
 ```
 
-#### 4.4 Exit Time (For Intraday)
+#### 4.4 Exit Time (For Intraday - Instrument Specific)
 ```
 Field Type: Time Picker
-Default Exit Time: 3:15 PM
+
+For EQUITY/OPTIONS (NSE/BSE):
+  Default Exit Time: 3:15 PM
   Range: 10:00 AM - 3:30 PM
+  Market Close: 3:30 PM
   
+For COMMODITIES (MCX):
+  Default Exit Time: 11:00 PM
+  Range: 10:00 AM - 11:30 PM
+  Market Close: 11:30 PM (or 5:00 PM for some commodities)
+  
+For CURRENCY (CDS):
+  Default Exit Time: 4:30 PM
+  Range: 10:00 AM - 5:00 PM
+  Market Close: 5:00 PM
+
 Options:
-  - Fixed Time Exit [Default: 3:15 PM]
+  - Fixed Time Exit [Default]
   - Square off if Target/SL not hit
+  - Trail till EOD (Keep trailing SL till market close)
   - Custom Exit Logic (Link to Pattern Creator)
+  
+Auto Square-off Warning:
+  ☑ Alert 15 minutes before exit time
+  ☑ Auto-exit all positions at specified time
 ```
 
 ---
@@ -461,8 +769,15 @@ CREATE TABLE strategies (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     
+    -- Instrument Selection (NEW)
+    asset_class VARCHAR(20), -- 'OPTIONS', 'EQUITY', 'COMMODITY', 'CURRENCY', 'FUTURES'
+    instrument_symbol VARCHAR(50), -- 'BANKNIFTY', 'NIFTY', 'RELIANCE', 'GOLD', etc.
+    exchange VARCHAR(10), -- 'NSE', 'BSE', 'NFO', 'MCX', 'CDS'
+    product_type VARCHAR(10), -- 'MIS', 'NRML', 'CNC', 'BO', 'CO'
+    lot_size_override INT, -- Custom lot size (NULL = use default)
+    
     -- Trading Type
-    trading_type VARCHAR(20), -- 'INTRADAY', 'POSITIONAL', 'SWING'
+    trading_type VARCHAR(20), -- 'INTRADAY', 'POSITIONAL', 'SWING', 'LONG_TERM'
     
     -- Entry Logic
     signal_bar_index INT, -- 0=First, 1=Second, 2=Third
@@ -472,12 +787,20 @@ CREATE TABLE strategies (
     require_volume_confirmation BOOLEAN DEFAULT FALSE,
     volume_threshold_pct DECIMAL(5,2) DEFAULT 150.00,
     
-    -- Strike Selection
+    -- Strike Selection (OPTIONS ONLY)
     expiry_type VARCHAR(20), -- 'WEEKLY', 'MONTHLY', 'CUSTOM'
     strike_selection VARCHAR(20), -- 'ATM', 'OTM_100', 'ITM_100', etc.
     strike_offset INT DEFAULT 0, -- Custom offset in points
     min_premium DECIMAL(10,2) DEFAULT 0,
     max_premium DECIMAL(10,2) DEFAULT 10000,
+    option_type VARCHAR(5), -- 'CE', 'PE', 'BOTH'
+    
+    -- Position Side (EQUITY/COMMODITY/FUTURES)
+    position_side VARCHAR(10), -- 'LONG', 'SHORT', 'BOTH'
+    quantity_type VARCHAR(20), -- 'FIXED', 'CAPITAL_BASED', 'PERCENTAGE'
+    fixed_quantity INT, -- For equity: shares, For others: lots
+    min_price DECIMAL(10,2), -- Min instrument price filter
+    max_price DECIMAL(10,2), -- Max instrument price filter
     
     -- Risk Management
     stop_loss_type VARCHAR(20), -- 'FIXED_POINTS', 'FIXED_PCT', 'SIGNAL_BAR'
@@ -572,11 +895,16 @@ CREATE TABLE trades (
     exit_premium DECIMAL(10,2),
     exit_reason VARCHAR(20), -- 'TARGET', 'SL', 'EOD'
     
-    -- Trade Details
-    signal_type VARCHAR(2), -- 'CE' or 'PE'
-    strike_price DECIMAL(10,2),
-    expiry_date DATE,
-    days_to_expiry INT,
+    -- Trade Details (Universal)
+    asset_class VARCHAR(20), -- 'OPTIONS', 'EQUITY', 'COMMODITY', 'FUTURES'
+    instrument_symbol VARCHAR(50), -- 'BANKNIFTY', 'RELIANCE', 'GOLD', etc.
+    signal_type VARCHAR(10), -- 'CE', 'PE', 'LONG', 'SHORT'
+    
+    -- Options-specific fields
+    strike_price DECIMAL(10,2), -- NULL for non-options
+    expiry_date DATE, -- NULL for equity (non-expiry)
+    days_to_expiry INT, -- NULL for equity
+    option_type VARCHAR(5), -- 'CE', 'PE', NULL
     
     -- Signal Bar Details
     signal_bar_high DECIMAL(10,2),
@@ -595,8 +923,11 @@ CREATE TABLE trades (
     gamma DECIMAL(5,6),
     theta_decay DECIMAL(10,2),
     
-    -- Lot Size
-    lot_size INT,
+    -- Quantity/Lot Size (Universal)
+    lot_size INT, -- For options/futures/commodity
+    quantity INT, -- For equity (number of shares)
+    contract_value DECIMAL(15,2), -- Total position value
+    margin_required DECIMAL(15,2), -- Margin blocked
     
     FOREIGN KEY (backtest_id) REFERENCES backtest_results(id)
 );
@@ -734,19 +1065,63 @@ Response: File download
 
 ### Data Management APIs
 
-#### Fetch Market Data
+#### Fetch Market Data (Universal)
 ```
 POST /api/data/fetch
 Body: {
-    symbol: "BANKNIFTY",
+    asset_class: "OPTIONS" | "EQUITY" | "COMMODITY" | "FUTURES",
+    symbol: "BANKNIFTY" | "RELIANCE" | "GOLD" | etc.,
+    exchange: "NSE" | "BSE" | "MCX" | "NFO",
     from_date: "2024-01-01",
     to_date: "2024-10-04",
-    interval: "5minute"
+    interval: "5minute",
+    include_options: true (only for OPTIONS asset class)
 }
 Response: {
     status: "success",
     candles_fetched: 12500,
-    date_range: "..."
+    date_range: "...",
+    instrument_info: {
+        lot_size: 15,
+        tick_size: 0.05,
+        contract_value: 75000
+    }
+}
+```
+
+#### Get Instrument List
+```
+GET /api/instruments
+Query Params: ?asset_class=EQUITY&exchange=NSE&search=TCS
+Response: {
+    instruments: [
+        {
+            symbol: "TCS",
+            name: "Tata Consultancy Services",
+            exchange: "NSE",
+            lot_size: 1,
+            last_price: 3450.50,
+            sector: "IT"
+        },
+        ...
+    ]
+}
+```
+
+#### Get Contract Specifications
+```
+GET /api/instruments/{symbol}/specs
+Query Params: ?exchange=NSE
+Response: {
+    symbol: "BANKNIFTY",
+    exchange: "NFO",
+    asset_class: "OPTIONS",
+    lot_size: 15,
+    tick_size: 0.05,
+    expiry_day: "Wednesday",
+    strike_interval: 100,
+    available_expiries: ["2024-10-09", "2024-10-16", ...],
+    margin_requirement: 75000
 }
 ```
 
@@ -975,20 +1350,30 @@ Feature: Get notified when signals occur
 
 ### Frontend
 ```
-- Framework: React.js or Vue.js
-- UI Library: Material-UI or Ant Design
-- Charts: Chart.js or Plotly.js
-- State Management: Redux or Vuex
-- HTTP Client: Axios
+- Framework: React.js (18+) or Vue.js (3+)
+- UI Library: Material-UI (MUI) or Ant Design
+- Charts: Chart.js, Plotly.js, or TradingView Widgets
+- State Management: Redux Toolkit or Zustand
+- HTTP Client: Axios with interceptors
+- Real-time Data: WebSocket (Socket.io)
+- Form Management: React Hook Form or Formik
 ```
 
 ### Backend
 ```
-- Framework: Flask (Python) or Node.js (Express)
-- Database: PostgreSQL
-- API: RESTful or GraphQL
-- Background Jobs: Celery (for backtesting)
-- Caching: Redis
+- Framework: Flask (Python 3.10+) or FastAPI (Recommended)
+- Alternative: Node.js with Express or NestJS
+- Database: PostgreSQL 14+ with TimescaleDB (for time-series data)
+- API: RESTful (primary) + GraphQL (optional)
+- Background Jobs: 
+  - Celery (Python) with Redis broker
+  - Bull (Node.js)
+- Caching: Redis 7+
+- Message Queue: RabbitMQ or Kafka (for real-time data)
+- Market Data Integration:
+  - Kite Connect API (Zerodha)
+  - NSE/BSE Data APIs
+  - MCX Data APIs
 ```
 
 ### Deployment
@@ -1085,7 +1470,20 @@ Feature: Get notified when signals occur
 
 ## 🎉 Conclusion
 
-This specification provides a comprehensive blueprint for building a robust, scalable, and user-friendly web interface for the Bank Nifty Options Trading Strategy platform. The modular design allows for incremental development and future enhancements while maintaining code quality and user experience.
+This specification provides a comprehensive blueprint for building a **universal, multi-asset trading strategy platform** that supports:
+
+✅ **Index Options** (Bank Nifty, Nifty, Fin Nifty)  
+✅ **Equity Trading** (NSE, BSE stocks)  
+✅ **Commodity Trading** (MCX - Gold, Silver, Crude, etc.)  
+✅ **Currency Trading** (CDS - USD/INR, EUR/INR, etc.)  
+✅ **Futures Trading** (Index & Stock Futures)  
+
+The platform is designed to be:
+- **Scalable**: Easily add new instruments and asset classes
+- **Modular**: Each component can be developed independently
+- **User-friendly**: Intuitive interface for strategy building
+- **Robust**: Comprehensive backtesting with accurate simulation
+- **Extensible**: Pattern creator and advanced features for power users
 
 **Next Steps:**
 1. Review and approve specification
