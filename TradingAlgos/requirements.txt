@@ -7,6 +7,11 @@ pandas>=1.3.0
 numpy>=1.21.0
 matplotlib>=3.4.0
 
+# Dashboard and pattern analytics
+dash>=2.17.0
+plotly>=5.22.0
+yfinance>=0.2.40
+
 # Optional: For advanced technical analysis
 # ta-lib>=0.4.0         # For more technical indicators
 # scipy>=1.7.0          # For statistical functions
