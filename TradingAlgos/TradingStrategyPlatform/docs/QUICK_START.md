@@ -1,52 +1,63 @@
-# Universal Trading Strategy Platform - Quick Start Guide
+# Strategy Builder - Quick Start Guide
+
+## 🎉 What's New
+
+The Strategy Builder is now fully functional with:
+- ✅ Complete 5-step wizard interface
+- ✅ Multi-asset support (Options, Equity, Commodity, Currency, Futures)
+- ✅ Backend API for saving strategies
+- ✅ Backtesting engine with detailed metrics
+- ✅ Full integration between frontend and backend
+
+---
 
 ## 📋 Prerequisites
 
 Before you begin, ensure you have the following installed:
 
-- **Python 3.10+** (Backend)
-- **Node.js 18+** (Frontend)
-- **PostgreSQL 14+** (Database)
-- **Redis 7+** (Caching & Background Jobs)
+- **Python 3.9+** (Backend)
+- **Node.js 16+** (Frontend)
+- **npm or yarn** (Package Manager)
 - **Git** (Version Control)
 
-## 🚀 Installation Steps
+---
 
-### 1. Clone the Repository
+## 🚀 Getting Started
 
-```bash
-cd "d:\New folder\Projects\TradingStrategyPlatform"
-```
-
-### 2. Backend Setup
-
-#### Install Python Dependencies
+### Step 1: Start the Backend Server
 
 ```bash
+# Navigate to backend directory
 cd backend
-python -m venv venv
-```
 
-**On Windows (PowerShell):**
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-
-**On Windows (CMD):**
-```cmd
-venv\Scripts\activate.bat
-```
-
-**On Linux/Mac:**
-```bash
-source venv/bin/activate
-```
-
-#### Install Requirements
-
-```bash
+# Install dependencies (first time only)
 pip install -r requirements.txt
+
+# Start the FastAPI server
+python app.py
 ```
+
+The backend will start at **http://localhost:8000**
+
+You can access the API documentation at:
+- Swagger UI: http://localhost:8000/api/docs
+- ReDoc: http://localhost:8000/api/redoc
+
+### Step 2: Start the Frontend
+
+```bash
+# Open a new terminal
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies (first time only)
+npm install
+
+# Start the React development server
+npm start
+```
+
+The frontend will start at **http://localhost:3000**
 
 #### Configure Environment
 

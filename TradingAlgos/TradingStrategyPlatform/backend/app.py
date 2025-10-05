@@ -85,10 +85,15 @@ async def health_check():
     }
 
 
-# Include routers (uncomment when created)
+# Import routers
+from api.routes import strategies, backtest
+
+# Include routers
+app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategies"])
+app.include_router(backtest.router, prefix="/api/backtest", tags=["Backtesting"])
+
+# Additional routers (to be implemented)
 # app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-# app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategies"])
-# app.include_router(backtest.router, prefix="/api/backtest", tags=["Backtesting"])
 # app.include_router(instruments.router, prefix="/api/instruments", tags=["Instruments"])
 # app.include_router(data.router, prefix="/api/data", tags=["Market Data"])
 # app.include_router(patterns.router, prefix="/api/patterns", tags=["Patterns"])
