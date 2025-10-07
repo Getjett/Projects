@@ -120,20 +120,70 @@ def generate_sample_trades(
     current_date = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    # Get instrument from strategy config
+    # Get instrument and asset class from strategy config
     instrument = strategy_config.get('instrument', 'NIFTY')
+    asset_class = strategy_config.get('asset_class', 'OPTIONS')
     min_price, max_price = get_price_range(instrument)
     
-    trade_count = random.randint(20, 50)
+    # Adjust price range for asset class
+    if asset_class == 'OPTIONS':
+        # Options premium range (₹10 - ₹500)
+        min_price = max(10, min_price * 0.05)  # 5% of stock price as minimum premium
+        max_price = min(500, max_price * 0.15)  # 15% of stock price as maximum premium
+    # For EQUITY, FUTURES, COMMODITY - use actual price range
     
-    for _ in range(trade_count):
-        if current_date >= end_datetime:
-            break
+    # Get entry time window from config (default: 9:15 - 15:00)
+    entry_time_start = strategy_config.get('entry_time_start', '09:15')
+    entry_time_end = strategy_config.get('entry_time_end', '15:00')
+    
+    # Parse entry times
+    start_hour, start_minute = map(int, entry_time_start.split(':'))
+    end_hour, end_minute = map(int, entry_time_end.split(':'))
+    
+    # Get quantity configuration
+    quantity_type = strategy_config.get('quantity_type', 'FIXED')
+    quantity = strategy_config.get('quantity', 1)
+    capital_per_trade = strategy_config.get('capital_per_trade', 50000)
+    total_capital = strategy_config.get('total_capital', 500000)
+    portfolio_percentage = strategy_config.get('portfolio_percentage', 10)
+    
+    if quantity is None or quantity == 0:
+        quantity = 1
+    
+    # Get avoid first minutes
+    avoid_first_minutes = strategy_config.get('avoid_first_minutes', 0)
+    
+    # Get stop loss configuration
+    stop_loss_type = strategy_config.get('stop_loss_type', 'PERCENTAGE')
+    stop_loss_value = strategy_config.get('stop_loss_value', 30)
+    
+    # Generate trades across the entire date range
+    # Calculate how many trading days are in the range (roughly 250 trading days per year)
+    total_days = (end_date - start_date).days
+    # Generate 1-3 trades per week on average
+    max_trades = int(total_days / 7 * 2)  # 2 trades per week average
+    max_trades = max(20, min(max_trades, 200))  # Between 20 and 200 trades
+    
+    trade_count = 0
+    while current_date < end_datetime and trade_count < max_trades:
+        trade_count += 1
         
-        # Random entry time during market hours
-        entry_hour = random.randint(9, 14)
-        entry_minute = random.randint(15, 59)
+        # Random entry time within configured window
+        entry_hour = random.randint(start_hour, min(end_hour, 14))
+        if entry_hour == start_hour:
+            entry_minute = random.randint(start_minute, 59)
+        elif entry_hour == end_hour:
+            entry_minute = random.randint(0, end_minute)
+        else:
+            entry_minute = random.randint(0, 59)
+        
+        # Apply "avoid first minutes" filter
         entry_time = current_date.replace(hour=entry_hour, minute=entry_minute)
+        market_open = current_date.replace(hour=9, minute=15)
+        if avoid_first_minutes > 0:
+            earliest_entry = market_open + timedelta(minutes=avoid_first_minutes)
+            if entry_time < earliest_entry:
+                entry_time = earliest_entry
         
         # Exit time (30 min to 3 hours later)
         exit_delta = timedelta(minutes=random.randint(30, 180))
@@ -145,39 +195,121 @@ def generate_sample_trades(
         
         # Generate trade data with accurate pricing
         entry_price = random.uniform(min_price, max_price)
+        
+        # Calculate quantity based on quantity type
+        trade_quantity = quantity  # Default to fixed quantity
+        
+        if quantity_type == 'CAPITAL':
+            # Calculate quantity based on capital per trade
+            trade_quantity = max(1, int(capital_per_trade / entry_price))
+        elif quantity_type == 'PERCENTAGE':
+            # Calculate quantity based on portfolio percentage
+            allocated_capital = (portfolio_percentage / 100) * total_capital
+            trade_quantity = max(1, int(allocated_capital / entry_price))
+        
+        # Get breakout direction from config
+        breakout_direction = strategy_config.get('breakout_direction', 'BOTH')
+        
+        # Determine position type based on breakout direction
+        if breakout_direction == 'BULLISH':
+            position_type = "BULLISH"
+        elif breakout_direction == 'BEARISH':
+            position_type = "BEARISH"
+        else:  # BOTH
+            position_type = random.choice(["BULLISH", "BEARISH"])
+        
+        # Get target and stop loss configuration
+        target_type = strategy_config.get('target_type', 'PERCENTAGE')
+        target_value = strategy_config.get('target_value', 50)
+        
+        # Calculate target price based on target type
+        if target_type == 'PERCENTAGE':
+            target_pct = target_value / 100
+            if position_type == "BULLISH":
+                target_price = entry_price * (1 + target_pct)
+            else:  # BEARISH
+                target_price = entry_price * (1 - target_pct)
+        elif target_type == 'POINTS':
+            if position_type == "BULLISH":
+                target_price = entry_price + target_value
+            else:  # BEARISH
+                target_price = entry_price - target_value
+        elif target_type == 'PREMIUM':
+            # For options - premium based target
+            if position_type == "BULLISH":
+                target_price = entry_price + target_value
+            else:
+                target_price = entry_price - target_value
+        else:
+            target_price = entry_price * 1.5  # Default 50% target
+        
+        # Calculate stop loss price based on stop loss type
+        if stop_loss_type == 'SIGNAL_BAR':
+            # Signal bar stop loss - simulate signal bar range
+            signal_bar_range_pct = 0.02  # Assume 2% signal bar range
+            if position_type == "BULLISH":
+                stop_loss_price = entry_price * (1 - signal_bar_range_pct)
+            else:  # BEARISH
+                stop_loss_price = entry_price * (1 + signal_bar_range_pct)
+        elif stop_loss_type == 'PERCENTAGE':
+            sl_pct = stop_loss_value / 100
+            if position_type == "BULLISH":
+                stop_loss_price = entry_price * (1 - sl_pct)
+            else:  # BEARISH
+                stop_loss_price = entry_price * (1 + sl_pct)
+        elif stop_loss_type == 'POINTS':
+            if position_type == "BULLISH":
+                stop_loss_price = entry_price - stop_loss_value
+            else:  # BEARISH
+                stop_loss_price = entry_price + stop_loss_value
+        elif stop_loss_type == 'PREMIUM':
+            if position_type == "BULLISH":
+                stop_loss_price = entry_price - stop_loss_value
+            else:
+                stop_loss_price = entry_price + stop_loss_value
+        else:
+            # Default stop loss
+            if position_type == "BULLISH":
+                stop_loss_price = entry_price * 0.97
+            else:
+                stop_loss_price = entry_price * 1.03
+        
+        # Simulate trade outcome based on configured targets and stop loss
         is_winner = random.random() < 0.55  # 55% win rate
         
-        # More realistic profit/loss percentages
         if is_winner:
-            profit_pct = random.uniform(0.02, 0.15)  # 2-15% profit
-            exit_price = entry_price * (1 + profit_pct)
+            # Hit target
+            exit_price = target_price
             exit_reason = "TARGET"
         else:
-            loss_pct = random.uniform(0.02, 0.10)  # 2-10% loss
-            exit_price = entry_price * (1 - loss_pct)
-            exit_reason = random.choice(["STOP_LOSS", "TIME_BASED", "EOD"])
+            # Random exit - could be stop loss or time based
+            exit_type = random.random()
+            if exit_type < 0.6:  # 60% hit stop loss
+                exit_price = stop_loss_price
+                exit_reason = "STOP_LOSS"
+            else:  # 40% time based exit (between entry and stop loss)
+                if position_type == "BULLISH":
+                    # Partial loss - somewhere between entry and stop loss
+                    exit_price = random.uniform(stop_loss_price, entry_price)
+                else:  # BEARISH
+                    exit_price = random.uniform(entry_price, stop_loss_price)
+                exit_reason = random.choice(["TIME_BASED", "EOD"])
         
-        # Determine quantity based on instrument type
-        if instrument in INSTRUMENT_PRICES and INSTRUMENT_PRICES[instrument][0] > 10000:
-            # High value stocks - smaller quantities
-            quantity = random.choice([1, 2, 5, 10])
-        elif instrument in ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY']:
-            # Index options - lot sizes
-            quantity = random.choice([15, 25, 50])
-        else:
-            # Regular stocks
-            quantity = random.choice([10, 25, 50, 100])
+        # Calculate profit/loss based on position type and calculated quantity
+        if position_type == "BULLISH":
+            profit_loss = (exit_price - entry_price) * trade_quantity
+        else:  # BEARISH
+            profit_loss = (entry_price - exit_price) * trade_quantity
         
-        profit_loss = (exit_price - entry_price) * quantity
-        profit_loss_percent = ((exit_price - entry_price) / entry_price) * 100
+        profit_loss_percent = (profit_loss / (entry_price * trade_quantity)) * 100
         
         trade = TradeResult(
             entry_time=entry_time,
             exit_time=exit_time,
             entry_price=round(entry_price, 2),
             exit_price=round(exit_price, 2),
-            quantity=quantity,
-            position_type="LONG",
+            quantity=trade_quantity,
+            position_type=position_type,
             profit_loss=round(profit_loss, 2),
             profit_loss_percent=round(profit_loss_percent, 2),
             exit_reason=exit_reason
@@ -336,18 +468,21 @@ async def run_backtest_simulation(
     import time
     start_time = time.time()
     
-    # Extract instrument from strategy_id if present (format: temp-INSTRUMENT-timestamp)
-    instrument = None
-    if strategy_id.startswith('temp-'):
-        parts = strategy_id.split('-')
-        if len(parts) >= 3:
-            instrument = parts[1]
+    # Get strategy configuration from request
+    strategy_config = request.strategy_config or {}
+    
+    # Extract instrument from config or strategy_id
+    if not strategy_config.get('instrument'):
+        if strategy_id.startswith('temp-'):
+            parts = strategy_id.split('-')
+            if len(parts) >= 3:
+                strategy_config['instrument'] = parts[1]
     
     # Simulate backtest execution
     trades = generate_sample_trades(
         request.start_date,
         request.end_date,
-        {"instrument": instrument} if instrument else {}
+        strategy_config
     )
     
     metrics = calculate_metrics(trades, request.initial_capital)

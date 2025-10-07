@@ -19,6 +19,9 @@ class BacktestRequest(BaseModel):
     # Optional filters
     market_condition: Optional[str] = None  # "TRENDING", "RANGING", "VOLATILE"
     include_weekends: bool = False
+    
+    # Strategy Configuration
+    strategy_config: Optional[Dict[str, Any]] = None  # Full strategy configuration from frontend
 
 
 class TradeResult(BaseModel):

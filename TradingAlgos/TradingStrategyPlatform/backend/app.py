@@ -86,11 +86,12 @@ async def health_check():
 
 
 # Import routers
-from api.routes import strategies, backtest
+from api.routes import strategies, backtest, optimization
 
 # Include routers
 app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategies"])
 app.include_router(backtest.router, prefix="/api/backtest", tags=["Backtesting"])
+app.include_router(optimization.router, prefix="/api/ai", tags=["AI Optimization"])
 
 # Additional routers (to be implemented)
 # app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])

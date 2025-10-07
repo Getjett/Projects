@@ -101,6 +101,21 @@ interface StrategyConfig {
   };
   volumeThreshold: number;
   
+  // Advanced Entry Parameters
+  entryTimeStart: string; // e.g., "09:15"
+  entryTimeEnd: string;   // e.g., "15:00"
+  minBreakoutPercentage: number; // Minimum % breakout to enter
+  avoidFirstMinutes: number; // Skip first N minutes after market open
+  requireGapUp: boolean; // Only enter if gap up/down
+  gapPercentage: number; // Minimum gap %
+  entryFilters: {
+    avoidRangeMarket: boolean; // Skip if market is ranging
+    requireTrend: boolean; // Require established trend
+    checkPreviousDayClose: boolean; // Compare with previous day
+    maxEntryPrice: number; // Don't enter above this price
+    minEntryPrice: number; // Don't enter below this price
+  };
+  
   // Strike/Price Selection (Options)
   expiry?: string;
   strikeSelection?: string;
@@ -116,6 +131,7 @@ interface StrategyConfig {
   capitalPerTrade?: number;
   portfolioPercentage?: number;
   leverage?: number;
+  totalCapital?: number; // Total available capital for trading
   
   // Exit Logic
   targetType: string;
@@ -133,9 +149,8 @@ interface StrategyConfig {
 
 const steps = [
   'Instrument Selection',
-  'Entry Configuration',
+  'Trading Rules & Risk',
   'Strike/Price Setup',
-  'Exit & Risk Management',
   'Review & Test'
 ];
 
@@ -148,6 +163,23 @@ const StrategyBuilder: React.FC = () => {
   const [tradesPerPage, setTradesPerPage] = useState(10);
   const [selectedTrade, setSelectedTrade] = useState<TradeResult | null>(null);
   const [chartDialogOpen, setChartDialogOpen] = useState(false);
+  
+  // Backtest date range - Default to last 400 days
+  const getDefaultDates = () => {
+    const today = new Date();
+    const endDate = today.toISOString().split('T')[0];
+    const startDate = new Date(today.setDate(today.getDate() - 400)).toISOString().split('T')[0];
+    return { startDate, endDate };
+  };
+  
+  const defaultDates = getDefaultDates();
+  const [backtestStartDate, setBacktestStartDate] = useState(defaultDates.startDate);
+  const [backtestEndDate, setBacktestEndDate] = useState(defaultDates.endDate);
+  
+  // Calculate min date (400 days ago)
+  const minBacktestDate = new Date();
+  minBacktestDate.setDate(minBacktestDate.getDate() - 400);
+  const minDateString = minBacktestDate.toISOString().split('T')[0];
   const [strategy, setStrategy] = useState<StrategyConfig>({
     strategyName: '',
     description: '',
@@ -167,6 +199,19 @@ const StrategyBuilder: React.FC = () => {
       retest: false,
     },
     volumeThreshold: 150,
+    entryTimeStart: '09:15',
+    entryTimeEnd: '15:00',
+    minBreakoutPercentage: 0.1,
+    avoidFirstMinutes: 0,
+    requireGapUp: false,
+    gapPercentage: 0.5,
+    entryFilters: {
+      avoidRangeMarket: false,
+      requireTrend: false,
+      checkPreviousDayClose: false,
+      maxEntryPrice: 0,
+      minEntryPrice: 0,
+    },
     expiry: 'Current Weekly',
     strikeSelection: 'ATM',
     strikeOffset: 0,
@@ -174,15 +219,16 @@ const StrategyBuilder: React.FC = () => {
     premiumMin: 50,
     premiumMax: 500,
     positionSide: 'LONG',
-    quantityType: 'FIXED',
+    quantityType: 'CAPITAL',
     quantity: 1,
     capitalPerTrade: 50000,
     portfolioPercentage: 10,
     leverage: 1,
+    totalCapital: 500000, // Default ₹5 lakh capital
     targetType: 'PERCENTAGE',
-    targetValue: 50,
-    stopLossType: 'PERCENTAGE',
-    stopLossValue: 30,
+    targetValue: 2,
+    stopLossType: 'SIGNAL_BAR',
+    stopLossValue: 1,
     trailingStop: false,
     trailingStopValue: 0,
     maxLossPerDay: 5000,
@@ -192,10 +238,19 @@ const StrategyBuilder: React.FC = () => {
 
   const handleNext = () => {
     setActiveStep((prevActiveStep) => prevActiveStep + 1);
+    // Clear backtest results when moving away from results step
+    if (activeStep === 4) {
+      // Leaving the Review & Test step
+      setBacktestResult(null);
+      setBacktestError(null);
+    }
   };
 
   const handleBack = () => {
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
+    // Clear backtest results when going back from results step
+    setBacktestResult(null);
+    setBacktestError(null);
   };
 
   const handleReset = () => {
@@ -309,11 +364,41 @@ const StrategyBuilder: React.FC = () => {
     const defaultInstrument = getDefaultInstrument(newAssetClass);
     const exchange = getExchangeForAssetClass(newAssetClass, defaultInstrument);
     console.log('Asset class changed to:', newAssetClass, 'Default instrument:', defaultInstrument, 'Exchange:', exchange);
+    
+    // Clear previous backtest results when asset class changes
+    setBacktestResult(null);
+    setBacktestError(null);
+    setSelectedTrade(null);
+    
+    // Set asset-class-specific realistic defaults
+    let targetValue = strategy.targetValue;
+    let stopLossValue = strategy.stopLossValue;
+    
+    if (newAssetClass === 'OPTIONS') {
+      // Options: Higher percentage targets are realistic due to premium movements
+      if (strategy.targetType === 'PERCENTAGE' && targetValue < 10) {
+        targetValue = 50; // 50% is realistic for options
+      }
+      if (strategy.stopLossType === 'PERCENTAGE' && stopLossValue < 10) {
+        stopLossValue = 30; // 30% SL for options
+      }
+    } else {
+      // Equity/Futures/Commodity: Lower percentage targets for realistic intraday
+      if (strategy.targetType === 'PERCENTAGE' && targetValue > 10) {
+        targetValue = 2; // 2% is realistic for intraday equity
+      }
+      if (strategy.stopLossType === 'PERCENTAGE' && stopLossValue > 5) {
+        stopLossValue = 1; // 1% SL for equity
+      }
+    }
+    
     setStrategy({
       ...strategy,
       assetClass: newAssetClass as 'OPTIONS' | 'EQUITY' | 'COMMODITY' | 'CURRENCY' | 'FUTURES',
       instrument: defaultInstrument,
-      exchange: exchange
+      exchange: exchange,
+      targetValue: targetValue,
+      stopLossValue: stopLossValue
     });
   };
 
@@ -321,6 +406,12 @@ const StrategyBuilder: React.FC = () => {
   const handleInstrumentChange = (newInstrument: string) => {
     const exchange = getExchangeForAssetClass(strategy.assetClass, newInstrument);
     console.log('Instrument changed to:', newInstrument, 'Exchange:', exchange);
+    
+    // Clear previous backtest results when instrument changes
+    setBacktestResult(null);
+    setBacktestError(null);
+    setSelectedTrade(null);
+    
     setStrategy({
       ...strategy,
       instrument: newInstrument,
@@ -730,13 +821,40 @@ const StrategyBuilder: React.FC = () => {
       const tempStrategyId = `temp-${strategy.instrument}-${Date.now()}`;
       
       // Create backtest request with snake_case for Python backend
+      // Convert strategy config to snake_case for backend
+      const strategyConfigSnakeCase = {
+        instrument: strategy.instrument,
+        asset_class: strategy.assetClass,
+        signal_bar: strategy.signalBar,
+        time_frame: strategy.timeFrame,
+        breakout_type: strategy.breakoutType,
+        breakout_direction: strategy.breakoutDirection,
+        entry_time_start: strategy.entryTimeStart,
+        entry_time_end: strategy.entryTimeEnd,
+        min_breakout_percentage: strategy.minBreakoutPercentage,
+        avoid_first_minutes: strategy.avoidFirstMinutes,
+        require_gap_up: strategy.requireGapUp,
+        gap_percentage: strategy.gapPercentage,
+        quantity: strategy.quantity || 1,
+        quantity_type: strategy.quantityType,
+        capital_per_trade: strategy.capitalPerTrade,
+        total_capital: strategy.totalCapital,
+        portfolio_percentage: strategy.portfolioPercentage,
+        leverage: strategy.leverage,
+        target_value: strategy.targetValue,
+        target_type: strategy.targetType,
+        stop_loss_value: strategy.stopLossValue,
+        stop_loss_type: strategy.stopLossType,
+      };
+      
       const backtestRequest = {
         strategy_id: tempStrategyId,
-        start_date: '2024-01-01',
-        end_date: '2024-12-31',
-        initial_capital: 100000,
+        start_date: backtestStartDate,
+        end_date: backtestEndDate,
+        initial_capital: strategy.totalCapital || 500000,
         commission_per_trade: 20,
         slippage_percent: 0.1,
+        strategy_config: strategyConfigSnakeCase,
       };
       
       console.log('Sending backtest request:', backtestRequest);
@@ -948,10 +1066,13 @@ const StrategyBuilder: React.FC = () => {
   );
 
   // Render Step 2: Entry Configuration
-  const renderEntryConfiguration = () => (
+  const renderTradingRulesAndRisk = () => (
     <Box>
       <Typography variant="h6" gutterBottom>
-        Entry Logic Configuration
+        Trading Rules & Risk Management
+      </Typography>
+      <Typography variant="body2" color="text.secondary" paragraph>
+        Configure entry conditions, exit rules, and risk parameters
       </Typography>
       
       <Grid container spacing={3}>
@@ -1091,6 +1212,179 @@ const StrategyBuilder: React.FC = () => {
             />
           </Grid>
         )}
+
+        <Grid item xs={12}>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+            ⏰ Entry Time Window
+          </Typography>
+        </Grid>
+
+        {/* Entry Time Window */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label="Entry Time Start"
+            type="time"
+            value={strategy.entryTimeStart}
+            onChange={(e) => setStrategy({ ...strategy, entryTimeStart: e.target.value })}
+            InputLabelProps={{ shrink: true }}
+            helperText="Start accepting entries from this time"
+          />
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label="Entry Time End"
+            type="time"
+            value={strategy.entryTimeEnd}
+            onChange={(e) => setStrategy({ ...strategy, entryTimeEnd: e.target.value })}
+            InputLabelProps={{ shrink: true }}
+            helperText="Stop taking new entries after this time"
+          />
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label="Avoid First Minutes"
+            type="number"
+            value={strategy.avoidFirstMinutes}
+            onChange={(e) => setStrategy({ ...strategy, avoidFirstMinutes: Number(e.target.value) })}
+            helperText="Skip entries for first N minutes after market open"
+          />
+        </Grid>
+
+        <Grid item xs={12}>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+            📊 Breakout & Gap Parameters
+          </Typography>
+        </Grid>
+
+        {/* Breakout Parameters */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label="Minimum Breakout %"
+            type="number"
+            value={strategy.minBreakoutPercentage}
+            onChange={(e) => setStrategy({ ...strategy, minBreakoutPercentage: Number(e.target.value) })}
+            helperText="Minimum % price must break beyond signal bar"
+            inputProps={{ step: 0.1, min: 0 }}
+          />
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={strategy.requireGapUp}
+                onChange={(e) => setStrategy({ ...strategy, requireGapUp: e.target.checked })}
+              />
+            }
+            label="Require Gap Up/Down"
+          />
+          {strategy.requireGapUp && (
+            <TextField
+              fullWidth
+              label="Minimum Gap %"
+              type="number"
+              value={strategy.gapPercentage}
+              onChange={(e) => setStrategy({ ...strategy, gapPercentage: Number(e.target.value) })}
+              sx={{ mt: 1 }}
+              inputProps={{ step: 0.1, min: 0 }}
+            />
+          )}
+        </Grid>
+
+        <Grid item xs={12}>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+            🛡️ Entry Filters (When NOT to Enter)
+          </Typography>
+        </Grid>
+
+        {/* Entry Filters */}
+        <Grid item xs={12}>
+          <FormGroup>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={strategy.entryFilters.avoidRangeMarket}
+                  onChange={(e) => setStrategy({
+                    ...strategy,
+                    entryFilters: { ...strategy.entryFilters, avoidRangeMarket: e.target.checked }
+                  })}
+                />
+              }
+              label="Avoid Range-Bound Market (Skip if market is sideways)"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={strategy.entryFilters.requireTrend}
+                  onChange={(e) => setStrategy({
+                    ...strategy,
+                    entryFilters: { ...strategy.entryFilters, requireTrend: e.target.checked }
+                  })}
+                />
+              }
+              label="Require Established Trend (Check if trend is present)"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={strategy.entryFilters.checkPreviousDayClose}
+                  onChange={(e) => setStrategy({
+                    ...strategy,
+                    entryFilters: { ...strategy.entryFilters, checkPreviousDayClose: e.target.checked }
+                  })}
+                />
+              }
+              label="Check Previous Day Close (Compare with yesterday's close)"
+            />
+          </FormGroup>
+        </Grid>
+
+        {/* Price Range Filters */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label="Maximum Entry Price"
+            type="number"
+            value={strategy.entryFilters.maxEntryPrice}
+            onChange={(e) => setStrategy({
+              ...strategy,
+              entryFilters: { ...strategy.entryFilters, maxEntryPrice: Number(e.target.value) }
+            })}
+            helperText="Don't enter if price is above this (0 = no limit)"
+          />
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label="Minimum Entry Price"
+            type="number"
+            value={strategy.entryFilters.minEntryPrice}
+            onChange={(e) => setStrategy({
+              ...strategy,
+              entryFilters: { ...strategy.entryFilters, minEntryPrice: Number(e.target.value) }
+            })}
+            helperText="Don't enter if price is below this (0 = no limit)"
+          />
+        </Grid>
+
+        <Grid item xs={12}>
+          <Alert severity="info">
+            <strong>Entry Summary:</strong> 
+            {' '}Entry window: {strategy.entryTimeStart} - {strategy.entryTimeEnd}
+            {' '}| Min breakout: {strategy.minBreakoutPercentage}%
+            {' '}| Avoid first {strategy.avoidFirstMinutes} mins
+          </Alert>
+        </Grid>
       </Grid>
     </Box>
   );
@@ -1214,6 +1508,21 @@ const StrategyBuilder: React.FC = () => {
               </FormControl>
             </Grid>
 
+            {/* Total Capital */}
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Total Trading Capital (₹)"
+                type="number"
+                value={strategy.totalCapital}
+                onChange={(e) => setStrategy({ ...strategy, totalCapital: Number(e.target.value) })}
+                helperText="Your total available capital for trading"
+                InputProps={{
+                  startAdornment: <Typography sx={{ mr: 1, color: 'text.secondary' }}>₹</Typography>
+                }}
+              />
+            </Grid>
+
             {/* Quantity Input */}
             <Grid item xs={12} md={6}>
               {strategy.quantityType === 'FIXED' && (
@@ -1223,6 +1532,7 @@ const StrategyBuilder: React.FC = () => {
                   type="number"
                   value={strategy.quantity}
                   onChange={(e) => setStrategy({ ...strategy, quantity: Number(e.target.value) })}
+                  helperText={`Fixed number of lots/shares per trade`}
                 />
               )}
               {strategy.quantityType === 'CAPITAL' && (
@@ -1232,6 +1542,7 @@ const StrategyBuilder: React.FC = () => {
                   type="number"
                   value={strategy.capitalPerTrade}
                   onChange={(e) => setStrategy({ ...strategy, capitalPerTrade: Number(e.target.value) })}
+                  helperText={`${((strategy.capitalPerTrade || 0) / (strategy.totalCapital || 1) * 100).toFixed(1)}% of total capital`}
                 />
               )}
               {strategy.quantityType === 'PERCENTAGE' && (
@@ -1241,8 +1552,61 @@ const StrategyBuilder: React.FC = () => {
                   type="number"
                   value={strategy.portfolioPercentage}
                   onChange={(e) => setStrategy({ ...strategy, portfolioPercentage: Number(e.target.value) })}
+                  helperText={`₹${((strategy.portfolioPercentage || 0) / 100 * (strategy.totalCapital || 0)).toFixed(0)} per trade`}
                 />
               )}
+            </Grid>
+
+            {/* Smart Quantity Calculator */}
+            <Grid item xs={12}>
+              <Alert severity="info" sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  💡 Smart Position Sizing:
+                </Typography>
+                {strategy.quantityType === 'FIXED' && (
+                  <Typography variant="body2">
+                    Fixed Quantity: <strong>{strategy.quantity || 1} lots/shares</strong> per trade
+                  </Typography>
+                )}
+                {strategy.quantityType === 'CAPITAL' && (
+                  <>
+                    <Typography variant="body2">
+                      Capital Allocation: <strong>₹{(strategy.capitalPerTrade || 0).toLocaleString()}</strong> per trade
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      {['OPTIONS', 'COMMODITY', 'CURRENCY', 'FUTURES'].includes(strategy.assetClass) ? (
+                        <>
+                          At ₹100 premium → <strong>{Math.floor((strategy.capitalPerTrade || 0) / 100)} lots</strong> |
+                          At ₹200 premium → <strong>{Math.floor((strategy.capitalPerTrade || 0) / 200)} lots</strong>
+                        </>
+                      ) : strategy.instrument === 'RELIANCE' ? (
+                        <>
+                          At ₹1,300/share → <strong>{Math.floor((strategy.capitalPerTrade || 0) / 1300)} shares</strong>
+                        </>
+                      ) : strategy.instrument === 'TCS' ? (
+                        <>
+                          At ₹4,200/share → <strong>{Math.floor((strategy.capitalPerTrade || 0) / 4200)} shares</strong>
+                        </>
+                      ) : (
+                        <>Quantity will be calculated based on entry price</>
+                      )}
+                    </Typography>
+                  </>
+                )}
+                {strategy.quantityType === 'PERCENTAGE' && (
+                  <>
+                    <Typography variant="body2">
+                      Capital Per Trade: <strong>₹{((strategy.portfolioPercentage || 0) / 100 * (strategy.totalCapital || 0)).toLocaleString()}</strong> ({strategy.portfolioPercentage}% of ₹{(strategy.totalCapital || 0).toLocaleString()})
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      Maximum {strategy.maxTradesPerDay} trades → Uses <strong>{(strategy.portfolioPercentage || 0) * strategy.maxTradesPerDay}%</strong> of total capital
+                    </Typography>
+                  </>
+                )}
+                <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
+                  With {strategy.leverage || 1}x leverage → Effective capital: ₹{((strategy.capitalPerTrade || 0) * (strategy.leverage || 1)).toLocaleString()}
+                </Typography>
+              </Alert>
             </Grid>
 
             {/* Leverage */}
@@ -1260,19 +1624,22 @@ const StrategyBuilder: React.FC = () => {
             </Grid>
           </>
         )}
-      </Grid>
-    </Box>
-  );
 
-  // Render Step 4: Exit & Risk Management
-  const renderExitRiskManagement = () => (
-    <Box>
-      <Typography variant="h6" gutterBottom>
-        Exit & Risk Management
-      </Typography>
-      
-      <Grid container spacing={3}>
+        {/* Section Divider */}
+        <Grid item xs={12}>
+          <Divider sx={{ my: 3 }} />
+          <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+            Exit & Risk Management
+          </Typography>
+        </Grid>
+
         {/* Target Configuration */}
+        <Grid item xs={12}>
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold" sx={{ mt: 1 }}>
+            🎯 Profit Target Configuration
+          </Typography>
+        </Grid>
+
         <Grid item xs={12} md={6}>
           <FormControl fullWidth>
             <InputLabel>Target Type</InputLabel>
@@ -1281,9 +1648,9 @@ const StrategyBuilder: React.FC = () => {
               label="Target Type"
               onChange={(e) => setStrategy({ ...strategy, targetType: e.target.value })}
             >
-              <MenuItem value="PERCENTAGE">Percentage (%)</MenuItem>
-              <MenuItem value="POINTS">Absolute Points</MenuItem>
-              <MenuItem value="PREMIUM">Premium Value (Options)</MenuItem>
+              <MenuItem value="PERCENTAGE">Percentage (%) - Based on Entry Price</MenuItem>
+              <MenuItem value="POINTS">Absolute Points - Fixed Point Move</MenuItem>
+              <MenuItem value="PREMIUM">Premium Value - For Options Trading</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -1295,11 +1662,39 @@ const StrategyBuilder: React.FC = () => {
             type="number"
             value={strategy.targetValue}
             onChange={(e) => setStrategy({ ...strategy, targetValue: Number(e.target.value) })}
-            helperText={strategy.targetType === 'PERCENTAGE' ? 'e.g., 50 for 50%' : 'Absolute value'}
+            helperText={
+              strategy.targetType === 'PERCENTAGE' 
+                ? strategy.assetClass === 'OPTIONS' 
+                  ? 'Options: 30-100% realistic (e.g., 50 for 50%)' 
+                  : 'Equity: 0.5-5% realistic (e.g., 2 for 2%)'
+                : strategy.targetType === 'POINTS'
+                ? 'e.g., 50 points profit'
+                : 'e.g., ₹50 premium profit'
+            }
+            error={
+              strategy.targetType === 'PERCENTAGE' && 
+              strategy.assetClass !== 'OPTIONS' && 
+              strategy.targetValue > 10
+            }
           />
         </Grid>
+        
+        {strategy.targetType === 'PERCENTAGE' && strategy.assetClass !== 'OPTIONS' && strategy.targetValue > 10 && (
+          <Grid item xs={12}>
+            <Alert severity="warning">
+              ⚠️ <strong>Unrealistic Target!</strong> {strategy.targetValue}% is too high for intraday equity trading. 
+              Typical intraday moves: 0.5-3%. Consider using <strong>1-5%</strong> for realistic results.
+            </Alert>
+          </Grid>
+        )}
 
         {/* Stop Loss Configuration */}
+        <Grid item xs={12}>
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+            🛡️ Stop Loss Configuration
+          </Typography>
+        </Grid>
+
         <Grid item xs={12} md={6}>
           <FormControl fullWidth>
             <InputLabel>Stop Loss Type</InputLabel>
@@ -1308,23 +1703,59 @@ const StrategyBuilder: React.FC = () => {
               label="Stop Loss Type"
               onChange={(e) => setStrategy({ ...strategy, stopLossType: e.target.value })}
             >
-              <MenuItem value="PERCENTAGE">Percentage (%)</MenuItem>
-              <MenuItem value="POINTS">Absolute Points</MenuItem>
-              <MenuItem value="PREMIUM">Premium Value (Options)</MenuItem>
+              <MenuItem value="SIGNAL_BAR">Signal Bar Level - High/Low of Signal Bar</MenuItem>
+              <MenuItem value="PERCENTAGE">Percentage (%) - Based on Entry Price</MenuItem>
+              <MenuItem value="POINTS">Absolute Points - Fixed Point Move</MenuItem>
+              <MenuItem value="PREMIUM">Premium Value - For Options Trading</MenuItem>
             </Select>
           </FormControl>
         </Grid>
 
-        <Grid item xs={12} md={6}>
-          <TextField
-            fullWidth
-            label="Stop Loss Value"
-            type="number"
-            value={strategy.stopLossValue}
-            onChange={(e) => setStrategy({ ...strategy, stopLossValue: Number(e.target.value) })}
-            helperText={strategy.stopLossType === 'PERCENTAGE' ? 'e.g., 30 for 30%' : 'Absolute value'}
-          />
-        </Grid>
+        {strategy.stopLossType !== 'SIGNAL_BAR' && (
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Stop Loss Value"
+              type="number"
+              value={strategy.stopLossValue}
+              onChange={(e) => setStrategy({ ...strategy, stopLossValue: Number(e.target.value) })}
+              helperText={
+                strategy.stopLossType === 'PERCENTAGE' 
+                  ? strategy.assetClass === 'OPTIONS'
+                    ? 'Options: 20-50% realistic (e.g., 30 for 30%)'
+                    : 'Equity: 0.3-2% realistic (e.g., 1 for 1%)'
+                  : strategy.stopLossType === 'POINTS'
+                  ? 'e.g., 20 points maximum loss'
+                  : 'e.g., ₹30 premium maximum loss'
+              }
+              error={
+                strategy.stopLossType === 'PERCENTAGE' && 
+                strategy.assetClass !== 'OPTIONS' && 
+                strategy.stopLossValue > 5
+              }
+            />
+          </Grid>
+        )}
+        
+        {strategy.stopLossType === 'PERCENTAGE' && strategy.assetClass !== 'OPTIONS' && strategy.stopLossValue > 5 && (
+          <Grid item xs={12}>
+            <Alert severity="error">
+              🚨 <strong>Excessive Risk!</strong> {strategy.stopLossValue}% stop loss is too wide for intraday equity. 
+              Recommended: <strong>0.5-2%</strong> to protect capital.
+            </Alert>
+          </Grid>
+        )}
+
+        {strategy.stopLossType === 'SIGNAL_BAR' && (
+          <Grid item xs={12} md={6}>
+            <Alert severity="info" sx={{ mt: 1 }}>
+              <strong>Signal Bar Stop Loss:</strong><br />
+              • Bullish trades: SL = Signal Bar LOW<br />
+              • Bearish trades: SL = Signal Bar HIGH<br />
+              Dynamic stop based on market structure
+            </Alert>
+          </Grid>
+        )}
 
         {/* Trailing Stop */}
         <Grid item xs={12}>
@@ -1497,6 +1928,59 @@ const StrategyBuilder: React.FC = () => {
         Your strategy is ready to test! You can save it for later or run a backtest now.
       </Alert>
 
+      {/* Backtest Date Range Configuration */}
+      <Card variant="outlined" sx={{ mb: 3, bgcolor: '#f8f9fa' }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            📅 Backtest Date Range
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Select the time period for testing your strategy (Past 400 days of historical data available)
+          </Typography>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <strong>Data Availability:</strong> Historical data is available from {minDateString} to today
+          </Alert>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Start Date"
+                type="date"
+                value={backtestStartDate}
+                onChange={(e) => setBacktestStartDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                helperText="Past 400 days available"
+                inputProps={{
+                  min: minDateString,
+                  max: backtestEndDate,
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="End Date"
+                type="date"
+                value={backtestEndDate}
+                onChange={(e) => setBacktestEndDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                helperText="Up to today"
+                inputProps={{
+                  min: backtestStartDate,
+                  max: new Date().toISOString().split('T')[0], // Can't test future
+                }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Alert severity="info" icon={false}>
+                <strong>Testing Period:</strong> {backtestStartDate} to {backtestEndDate}
+                {' '}({Math.ceil((new Date(backtestEndDate).getTime() - new Date(backtestStartDate).getTime()) / (1000 * 60 * 60 * 24))} days)
+              </Alert>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
+
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
           <Card variant="outlined">
@@ -1564,9 +2048,24 @@ const StrategyBuilder: React.FC = () => {
       {/* Backtest Results */}
       {backtestResult && (
         <Box sx={{ mt: 3 }}>
-          <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <ShowChartIcon /> Backtest Results
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ShowChartIcon /> Backtest Results
+            </Typography>
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<RefreshIcon />}
+              onClick={() => {
+                setBacktestResult(null);
+                setBacktestError(null);
+                setSelectedTrade(null);
+                setTradePage(0);
+              }}
+            >
+              Clear Results
+            </Button>
+          </Box>
 
           {/* Performance Metrics Cards */}
           <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -1719,6 +2218,7 @@ const StrategyBuilder: React.FC = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell>#</TableCell>
+                      <TableCell>Side</TableCell>
                       <TableCell>Entry Time</TableCell>
                       <TableCell>Exit Time</TableCell>
                       <TableCell align="right">Entry Price</TableCell>
@@ -1743,6 +2243,17 @@ const StrategyBuilder: React.FC = () => {
                           }}
                         >
                           <TableCell>{tradePage * tradesPerPage + index + 1}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={trade.position_type === 'BULLISH' ? '🟢 BULL' : '🔴 BEAR'} 
+                              size="small"
+                              sx={{
+                                bgcolor: trade.position_type === 'BULLISH' ? 'success.light' : 'error.light',
+                                color: trade.position_type === 'BULLISH' ? 'success.dark' : 'error.dark',
+                                fontWeight: 'bold'
+                              }}
+                            />
+                          </TableCell>
                           <TableCell>{new Date(trade.entry_time).toLocaleString()}</TableCell>
                           <TableCell>{new Date(trade.exit_time).toLocaleString()}</TableCell>
                           <TableCell align="right">₹{trade.entry_price.toFixed(2)}</TableCell>
@@ -2118,12 +2629,10 @@ const StrategyBuilder: React.FC = () => {
       case 0:
         return renderInstrumentSelection();
       case 1:
-        return renderEntryConfiguration();
+        return renderTradingRulesAndRisk();
       case 2:
         return renderStrikePriceSetup();
       case 3:
-        return renderExitRiskManagement();
-      case 4:
         return renderReviewTest();
       default:
         return 'Unknown step';
