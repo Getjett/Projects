@@ -1,3 +1,1 @@
-"""
-API Routes package initialization
-"""
+# API routes module

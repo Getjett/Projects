@@ -1,184 +1,151 @@
-# 📊 Universal Trading Strategy Platform
+# AstraCharts Trading Platform
 
-A comprehensive web-based trading strategy platform supporting multiple asset classes including Index Options, Equity, Commodities, Currency, and Futures.
+A comprehensive algorithmic trading platform with advanced charting, backtesting, and strategy optimization capabilities.
 
-## 🎯 Features
+## 🚀 Quick Start
 
-- **Multi-Asset Support**: Trade strategies for Options, Equity, Commodities, Currency, and Futures
-- **Strategy Builder**: Create custom strategies with 70+ parameters
-- **Backtesting Engine**: Test strategies on historical data
-- **Pattern Creator**: Build and test candlestick patterns
-- **Real-time Analytics**: Comprehensive performance metrics and visualizations
-- **Multi-Instrument Portfolio**: Manage strategies across different instruments
+### Prerequisites
+- **Python 3.8+** - [Download Python](https://python.org)
+- **Node.js 16+** - [Download Node.js](https://nodejs.org)
+- **npm** (comes with Node.js)
+
+### Setup & Launch
+
+#### Linux/macOS
+```bash
+# Clone or extract the project
+cd TradingStrategyPlatform
+
+# Setup (run once)
+./setup.sh
+
+# Start application
+./start.sh
+```
+
+#### Windows
+```cmd
+# Clone or extract the project
+cd TradingStrategyPlatform
+
+# Setup (run once)
+setup.bat
+
+# Start application
+start.bat
+```
+
+### Manual Startup (if needed)
+
+#### Backend Only
+```bash
+# Linux/macOS
+./start-backend.sh
+
+# Windows
+start-backend.bat
+```
+
+#### Frontend Only
+```bash
+# Linux/macOS
+./start-frontend.sh
+
+# Windows
+start-frontend.bat
+```
+
+## 📡 Access Points
+
+Once running, access the application at:
+
+- **🎨 Frontend Application**: http://localhost:3000
+- **🔧 Backend API**: http://localhost:8000
+- **📚 API Documentation**: http://localhost:8000/docs
+
+## 🏗️ Architecture
+
+### Backend (FastAPI + Python)
+- RESTful API with automatic documentation
+- Advanced chart visualization with Plotly.js
+- Asynchronous backtesting with Celery
+- Comprehensive strategy management
+- Real-time data processing
+
+### Frontend (React + TypeScript)
+- Modern React with TypeScript
+- Interactive charts with Plotly.js
+- Responsive design
+- Real-time updates
+- Strategy configuration interface
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**Port Already in Use**
+- Backend (8000): The setup scripts automatically kill existing processes
+- Frontend (3000): The setup scripts handle this automatically
+
+**Dependencies Issues**
+- Run setup script again: `./setup.sh` (Linux/macOS) or `setup.bat` (Windows)
+- For Node.js issues, delete `frontend/node_modules` and run setup again
+
+**Permission Issues (Linux/macOS)**
+```bash
+chmod +x *.sh
+```
+
+**Python Virtual Environment Issues**
+```bash
+# Delete and recreate
+rm -rf backend/venv
+./setup.sh
+```
 
 ## 📁 Project Structure
 
 ```
 TradingStrategyPlatform/
-├── backend/                 # Backend API (Flask/FastAPI)
-│   ├── api/                # API endpoints
-│   ├── models/             # Database models
-│   ├── services/           # Business logic
-│   ├── strategies/         # Strategy execution engine
-│   ├── backtesting/        # Backtesting engine
-│   ├── data/               # Data fetching and processing
-│   └── config/             # Configuration files
-│
-├── frontend/               # Frontend UI (React/Vue)
-│   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API services
-│   │   ├── store/          # State management
-│   │   └── utils/          # Utility functions
-│   └── public/             # Static assets
-│
-├── database/               # Database scripts
-│   ├── schema.sql          # Database schema
-│   ├── migrations/         # Migration scripts
-│   └── seeds/              # Seed data
-│
-├── docs/                   # Documentation
-│   ├── WEB_INTERFACE_SPECIFICATION.md
-│   ├── API_DOCUMENTATION.md
-│   └── USER_GUIDE.md
-│
-└── docker/                 # Docker configuration
-    ├── Dockerfile.backend
-    ├── Dockerfile.frontend
-    └── docker-compose.yml
+├── backend/              # FastAPI backend
+│   ├── main.py          # API entry point
+│   ├── chart_visualization.py  # Plotly chart generation
+│   ├── async_processing.py    # Celery async tasks
+│   ├── requirements.txt # Python dependencies
+│   └── venv/           # Virtual environment
+├── frontend/            # React frontend
+│   ├── src/            # Source code
+│   ├── package.json    # Node.js dependencies
+│   └── node_modules/   # Installed packages
+├── setup.sh/.bat       # Automated setup
+├── start.sh/.bat       # Complete application launcher
+├── start-backend.sh/.bat   # Backend launcher
+└── start-frontend.sh/.bat  # Frontend launcher
 ```
 
-## 🚀 Quick Start
+## 🎯 Features
 
-### Prerequisites
+- **📊 Advanced Charting**: Interactive candlestick charts with technical indicators
+- **🔄 Backtesting**: Historical strategy testing with performance metrics
+- **⚡ Async Processing**: Non-blocking strategy execution with Celery
+- **🎨 Modern UI**: Responsive React interface with TypeScript
+- **📈 Strategy Management**: Create, test, and optimize trading strategies
+- **📱 Real-time Updates**: Live chart updates and trade execution
+- **🔧 API Documentation**: Automatic OpenAPI/Swagger documentation
 
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL 14+
-- Redis 7+
+## 💡 Usage Tips
 
-### Backend Setup
+1. **First Time Setup**: Always run the setup script before starting
+2. **Regular Use**: Just use `start.sh` or `start.bat` to launch everything
+3. **Development**: Use individual service scripts for backend-only or frontend-only work
+4. **Stopping**: Press Ctrl+C in the terminal (Linux/macOS) or close windows (Windows)
 
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python app.py
-```
+## 🆘 Support
 
-### Frontend Setup
+If you encounter issues:
 
-```bash
-cd frontend
-npm install
-npm start
-```
-
-### Database Setup
-
-```bash
-cd database
-psql -U postgres -f schema.sql
-```
-
-## 📚 Documentation
-
-- [Web Interface Specification](docs/WEB_INTERFACE_SPECIFICATION.md)
-- [API Documentation](docs/API_DOCUMENTATION.md)
-- [User Guide](docs/USER_GUIDE.md)
-
-## 🛠 Technology Stack
-
-### Frontend
-- React.js 18+ with TypeScript
-- Material-UI (MUI)
-- Chart.js / TradingView Widgets
-- Redux Toolkit
-- Axios
-
-### Backend
-- FastAPI (Python 3.10+)
-- PostgreSQL 14+ with TimescaleDB
-- Redis for caching
-- Celery for background jobs
-- Kite Connect API integration
-
-### DevOps
-- Docker & Docker Compose
-- GitHub Actions for CI/CD
-- AWS/DigitalOcean for deployment
-
-## 📊 Supported Instruments
-
-### Index Options
-- NIFTY (Nifty 50)
-- BANKNIFTY (Bank Nifty)
-- FINNIFTY (Fin Nifty)
-- MIDCPNIFTY (Midcap Nifty)
-
-### Equity (NSE/BSE)
-- All NSE/BSE listed stocks
-- Sector-wise filtering
-- Custom watchlists
-
-### Commodities (MCX)
-- **Bullion**: Gold, Silver
-- **Energy**: Crude Oil, Natural Gas
-- **Agriculture**: Cardamom, Cotton, Mentha Oil
-- **Base Metals**: Copper, Zinc, Nickel, Lead, Aluminium
-
-### Currency (CDS)
-- USD/INR, EUR/INR, GBP/INR, JPY/INR
-
-### Futures
-- Index Futures (Nifty, Bank Nifty)
-- Stock Futures
-
-## 🔒 Security
-
-- JWT-based authentication
-- Password hashing with bcrypt
-- API rate limiting
-- HTTPS only
-- Input sanitization
-- SQL injection prevention
-
-## 📈 Development Roadmap
-
-### Phase 1 (MVP) - Completed ✅
-- User authentication
-- Basic strategy builder
-- Backtesting engine
-- Results visualization
-
-### Phase 2 (In Progress) 🚧
-- Advanced filters
-- Pattern creator
-- Multi-instrument support
-- Real-time data integration
-
-### Phase 3 (Planned) 📋
-- Paper trading
-- Live trading integration
-- Alerts & notifications
-- Portfolio management
-
-## 👥 Contributing
-
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
-
-## 📝 License
-
-This project is licensed under the MIT License.
-
-## 📞 Support
-
-For support, email support@tradingstrategy.com or join our community forum.
-
----
-
-**Version**: 1.0.0  
-**Last Updated**: October 4, 2025  
-**Status**: Active Development
+1. Check that all prerequisites are installed
+2. Run the setup script again
+3. Check the terminal/command prompt for error messages
+4. Ensure ports 3000 and 8000 are available
+5. For Windows users, run Command Prompt as Administrator if needed

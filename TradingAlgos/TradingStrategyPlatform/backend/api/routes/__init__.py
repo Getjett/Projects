@@ -1,3 +1,1 @@
-"""
-API Routes initialization
-"""
+# API routes
